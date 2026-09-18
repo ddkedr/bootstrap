@@ -933,19 +933,22 @@ EOF
 log_info "Marker written: /var/local/bootstrap-done"
 echo
 
+HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 if [[ -n "${SSH_PORT:-}" ]]; then
     log_warning "Before closing this session, verify SSH access in a NEW terminal:"
-    log_warning "    ssh -p $SSH_PORT $FINAL_USER@<this-host>"
+    log_warning "    ssh -p $SSH_PORT $FINAL_USER@${HOST_IP:-<this-host>}"
     echo
 fi
 
 # Hand-off to the laptop side: keymaster server-add installs keymaster on
 # this host, adds the hosts.conf block and verifies the result
-# (keymaster/docs/ssh-playbook.md, "Новый сервер")
-HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+# (keymaster/docs/ssh-playbook.md, "Новый сервер"). Alias = prefix + hostname,
+# unless the hostname already carries the prefix.
 ALIAS_PREFIX=$([[ "$PROFILE" == "cloud" ]] && echo vps || echo pve)
+ALIAS=$(hostname)
+if [[ "$ALIAS" != ${ALIAS_PREFIX}-* ]]; then ALIAS="${ALIAS_PREFIX}-${ALIAS}"; fi
 log_info "Next, on your laptop:"
-log_info "    keymaster server-add ${ALIAS_PREFIX}-$(hostname) ${HOST_IP:-<this-host>} ${SSH_PORT:-22} $FINAL_USER"
+log_info "    keymaster server-add $ALIAS ${HOST_IP:-<this-host>} ${SSH_PORT:-22} $FINAL_USER"
 echo
 
 if [[ -f /var/run/reboot-required ]]; then
