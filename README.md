@@ -10,8 +10,11 @@ swap, timezone. В начале выбирается профиль: `cloud` д�
 Запуск из консоли свежей машины под root, одной строкой:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ddkedr/bootstrap/main/bootstrap.sh -o bootstrap.sh && bash bootstrap.sh
+apt-get update -qq && apt-get install -y -qq curl && curl -fsSL https://raw.githubusercontent.com/ddkedr/bootstrap/main/bootstrap.sh -o bootstrap.sh && bash bootstrap.sh
 ```
+
+Минимальные образы CT и VM идут без `curl`, поэтому он ставится первым;
+если он уже есть, первые две команды ничего не меняют.
 
 Скрипт скачивается на диск, а не течёт в `bash` из curl: его можно
 посмотреть перед запуском и прогнать повторно, он рассчитан на это

@@ -9,7 +9,8 @@
 # confirmed or skipped individually.
 #
 # Usage, from the console of a fresh machine as root:
-#   curl -fsSL https://raw.githubusercontent.com/ddkedr/bootstrap/main/bootstrap.sh -o bootstrap.sh && bash bootstrap.sh
+#   apt-get update -qq && apt-get install -y -qq curl && curl -fsSL https://raw.githubusercontent.com/ddkedr/bootstrap/main/bootstrap.sh -o bootstrap.sh && bash bootstrap.sh
+# (minimal CT/VM images ship without curl; the script needs it too)
 #
 # This script is the server half of the SSH key scheme; the scheme itself,
 # its docs and the `keymaster` command live in the private repo
@@ -176,6 +177,13 @@ while [[ -z "$PROFILE" ]]; do
 done
 log_success "Profile: $PROFILE"
 add_summary "Profile: $PROFILE"
+
+# curl is used for the GitHub check, the key fetch and later by keymaster
+# pull; minimal images come without it
+if ! command -v curl &>/dev/null; then
+    log_info "curl is missing, installing..."
+    apt_install curl ca-certificates
+fi
 
 # Keys come from github.com, both here (step 6) and later via keymaster pull.
 # A LAN host reaches GitHub only through the tunnel, so check before going on.
