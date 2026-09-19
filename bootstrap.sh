@@ -746,13 +746,24 @@ echo
 #-------------------------------------------------------------------------------
 log_info "=== STEP 11: Docker ==="
 
-if prompt_yes_no "Install Docker?" "yes"; then
+# Show the current state before asking: the answer means different things
+# on a bare host (install) and on one that already runs Docker (only the
+# log rotation and group membership below are touched, nothing reinstalled)
+if command -v docker &>/dev/null; then
+    log_info "Docker: installed ($(docker --version 2>/dev/null | sed 's/,.*//'))"
+    DOCKER_PROMPT="Configure Docker (log rotation, docker group for $FINAL_USER)? Nothing is reinstalled."
+else
+    log_info "Docker: not installed"
+    DOCKER_PROMPT="Install Docker?"
+fi
+
+if prompt_yes_no "$DOCKER_PROMPT" "yes"; then
     if [[ "$VIRT_CONTAINER" != "none" ]]; then
         log_warning "This looks like a container (LXC/CT). Docker inside a CT needs nesting=1 and may still misbehave - a VM is more reliable."
     fi
 
     if command -v docker &>/dev/null; then
-        log_warning "Docker already installed"
+        log_info "Docker already installed, skipping installation"
     elif prompt_yes_no "Use Docker convenience script (get.docker.com)?" "yes"; then
         curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
         sh /tmp/get-docker.sh
