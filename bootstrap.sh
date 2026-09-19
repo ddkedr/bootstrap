@@ -792,6 +792,26 @@ if prompt_yes_no "$DOCKER_PROMPT" "yes"; then
         log_warning "Docker is installed as a snap. Its data lives in /var/snap/docker, NOT /var/lib/docker,"
         log_warning "so a migration would not carry containers and volumes over. Not touching it."
         log_warning "To migrate by hand: export what matters, 'snap remove docker', rerun this step."
+    elif [[ "$DOCKER_SOURCE" == "docker-ce" ]]; then
+        # docker-ce without its apt repo (typically lost in a release upgrade)
+        # never gets updates: apt sees no newer candidate. Re-add the repo for
+        # the current release so step 2 and unattended-upgrades can do their job.
+        CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+        if ! grep -rqs "download.docker.com/linux/$OS_ID $CODENAME" /etc/apt/sources.list.d/; then
+            log_warning "docker-ce is installed, but the docker.com apt repo for $OS_ID $CODENAME is missing:"
+            log_warning "installed $(dpkg-query -W -f='${Version}' docker-ce 2>/dev/null), apt cannot see anything newer."
+            if prompt_yes_no "Add the docker.com repo for $CODENAME and update Docker? (containers restart)" "yes"; then
+                install -d -m 755 /etc/apt/keyrings
+                curl -fsSL "https://download.docker.com/linux/$OS_ID/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+                chmod a+r /etc/apt/keyrings/docker.gpg
+                echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_ID $CODENAME stable" \
+                    > /etc/apt/sources.list.d/docker.list
+                apt-get update -qq
+                apt-get install -y -qq --only-upgrade docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                log_success "Docker updated to $(docker --version 2>/dev/null | sed 's/,.*//')"
+                add_summary "Docker apt repo restored ($CODENAME), Docker updated"
+            fi
+        fi
     fi
 
     if [[ "$DOCKER_SOURCE" != "none" ]]; then
