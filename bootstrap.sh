@@ -3,10 +3,13 @@
 # Bootstrap script for new Ubuntu/Debian machines
 #
 # Interactive. At the start you pick a profile:
-#   1) cloud - VPS with a public IP (hardening steps default to YES)
-#   2) local - VM/CT on Proxmox behind NAT (hardening steps default to NO)
-# The profile only changes the DEFAULT answers - every step can still be
-# confirmed or skipped individually.
+#   1) cloud - VPS with a public IP (ufw, fail2ban, swap default to YES)
+#   2) local - VM/CT on Proxmox behind NAT (those default to NO)
+# SSH hardening (root login off, password auth off) defaults to YES on both:
+# a sudo user with a key makes root login pointless anywhere, and the
+# emergency key plus console cover the lockout case. The profile only
+# changes the DEFAULT answers - every step can still be confirmed or
+# skipped individually.
 #
 # Usage, from the console of a fresh machine as root:
 #   apt-get update -qq && apt-get install -y -qq curl && curl -fsSL https://raw.githubusercontent.com/ddkedr/bootstrap/main/bootstrap.sh -o bootstrap.sh && bash bootstrap.sh
@@ -164,8 +167,9 @@ echo
 # STEP 0: Profile selection
 #-------------------------------------------------------------------------------
 log_info "=== STEP 0: Server Profile ==="
-echo "  1) cloud - VPS with a public IP (SSH hardening, UFW, fail2ban default to YES)"
-echo "  2) local - VM/CT on Proxmox behind NAT (those steps default to NO)"
+echo "  1) cloud - VPS with a public IP (UFW, fail2ban, swap default to YES)"
+echo "  2) local - VM/CT on Proxmox behind NAT (those default to NO)"
+echo "  SSH hardening (root off, password off) defaults to YES for both."
 
 PROFILE=""
 while [[ -z "$PROFILE" ]]; do
@@ -486,7 +490,7 @@ log_info "=== STEP 7: SSH Hardening ==="
 SSH_PORT=""
 SSHD_DROPIN="/etc/ssh/sshd_config.d/00-bootstrap.conf"
 
-if prompt_yes_no "Configure SSH hardening?" "$(pdef yes no)"; then
+if prompt_yes_no "Configure SSH hardening?" "yes"; then
     # --- Port ---
     while true; do
         read -r -p "SSH port [22]: " SSH_PORT
@@ -499,14 +503,14 @@ if prompt_yes_no "Configure SSH hardening?" "$(pdef yes no)"; then
 
     # --- Root login ---
     DISABLE_ROOT="no"
-    if prompt_yes_no "Disable root login?" "$(pdef yes no)"; then
+    if prompt_yes_no "Disable root login?" "yes"; then
         DISABLE_ROOT="yes"
     fi
 
     # --- Password authentication ---
     DISABLE_PASSWORDS="no"
     if [[ -s "$AUTH_KEYS" ]]; then
-        if prompt_yes_no "Disable password authentication (key-only login)?" "$(pdef yes no)"; then
+        if prompt_yes_no "Disable password authentication (key-only login)?" "yes"; then
             DISABLE_PASSWORDS="yes"
         fi
     else
