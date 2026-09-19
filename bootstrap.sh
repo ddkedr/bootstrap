@@ -746,11 +746,26 @@ echo
 #-------------------------------------------------------------------------------
 log_info "=== STEP 11: Docker ==="
 
+# Where Docker came from decides whether apt keeps it current:
+#   docker-ce  official docker.com repo, updated by step 2 and unattended-upgrades
+#   docker.io  distro package, months behind, only bumps with the distro
+#   snap       separate world, data lives in /var/snap/docker, not /var/lib/docker
+DOCKER_SOURCE="none"
+if dpkg -s docker-ce &>/dev/null; then
+    DOCKER_SOURCE="docker-ce"
+elif dpkg -s docker.io &>/dev/null; then
+    DOCKER_SOURCE="docker.io"
+elif command -v snap &>/dev/null && snap list docker &>/dev/null; then
+    DOCKER_SOURCE="snap"
+elif command -v docker &>/dev/null; then
+    DOCKER_SOURCE="other"
+fi
+
 # Show the current state before asking: the answer means different things
 # on a bare host (install) and on one that already runs Docker (only the
 # log rotation and group membership below are touched, nothing reinstalled)
-if command -v docker &>/dev/null; then
-    log_info "Docker: installed ($(docker --version 2>/dev/null | sed 's/,.*//'))"
+if [[ "$DOCKER_SOURCE" != "none" ]]; then
+    log_info "Docker: installed ($(docker --version 2>/dev/null | sed 's/,.*//'), source: $DOCKER_SOURCE)"
     DOCKER_PROMPT="Configure Docker (log rotation, docker group for $FINAL_USER)? Nothing is reinstalled."
 else
     log_info "Docker: not installed"
@@ -762,7 +777,24 @@ if prompt_yes_no "$DOCKER_PROMPT" "yes"; then
         log_warning "This looks like a container (LXC/CT). Docker inside a CT needs nesting=1 and may still misbehave - a VM is more reliable."
     fi
 
-    if command -v docker &>/dev/null; then
+    # Distro package: offer to move to the official repo. Images, containers
+    # and volumes stay in /var/lib/docker; containers stop for the duration
+    # and come back if they have a restart policy.
+    if [[ "$DOCKER_SOURCE" == "docker.io" ]]; then
+        log_warning "Docker comes from the distro package docker.io ($(docker --version 2>/dev/null | sed 's/,.*//')), which lags behind docker.com by months."
+        if prompt_yes_no "Migrate to the official docker-ce repo? (containers restart, data in /var/lib/docker is kept)" "yes"; then
+            log_info "Stopping Docker and removing the distro packages..."
+            systemctl stop docker docker.socket 2>/dev/null || true
+            apt-get remove -y -qq docker.io docker-doc docker-compose podman-docker containerd runc 2>/dev/null || true
+            DOCKER_SOURCE="none"
+        fi
+    elif [[ "$DOCKER_SOURCE" == "snap" ]]; then
+        log_warning "Docker is installed as a snap. Its data lives in /var/snap/docker, NOT /var/lib/docker,"
+        log_warning "so a migration would not carry containers and volumes over. Not touching it."
+        log_warning "To migrate by hand: export what matters, 'snap remove docker', rerun this step."
+    fi
+
+    if [[ "$DOCKER_SOURCE" != "none" ]]; then
         log_info "Docker already installed, skipping installation"
     elif prompt_yes_no "Use Docker convenience script (get.docker.com)?" "yes"; then
         curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
@@ -807,7 +839,7 @@ EOF
         fi
 
         log_success "Docker installed"
-        add_summary "Docker installed"
+        add_summary "Docker installed (source: $(dpkg -s docker-ce &>/dev/null && echo docker-ce || echo "$DOCKER_SOURCE"))"
     else
         log_error "Docker installation failed"
     fi
