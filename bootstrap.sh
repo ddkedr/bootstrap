@@ -920,8 +920,18 @@ log_info "=== STEP 14: Timezone & Time Sync ==="
 CURRENT_TZ=$(timedatectl show -p Timezone --value 2>/dev/null || cat /etc/timezone 2>/dev/null || echo "unknown")
 log_info "Current timezone: $CURRENT_TZ"
 
-if prompt_yes_no "Change timezone?" "no"; then
-    read -r -p "Enter timezone (e.g. Europe/Moscow, Etc/UTC): " TIMEZONE
+# Fresh images come up in UTC. A LAN box is read by a human in local time,
+# so offer to change it; a VPS is fine in UTC (logs, cron and the rest of
+# the world agree), so leave the default at no there.
+TZ_DEFAULT="Europe/Moscow"
+TZ_ASK="no"
+if [[ "$CURRENT_TZ" == "Etc/UTC" || "$CURRENT_TZ" == "UTC" ]] && [[ "$PROFILE" == "local" ]]; then
+    TZ_ASK="yes"
+fi
+
+if prompt_yes_no "Change timezone?" "$TZ_ASK"; then
+    read -r -p "Enter timezone [$TZ_DEFAULT]: " TIMEZONE
+    TIMEZONE="${TIMEZONE:-$TZ_DEFAULT}"
     if [[ -n "${TIMEZONE:-}" ]]; then
         if timedatectl set-timezone "$TIMEZONE" 2>/dev/null; then
             log_success "Timezone set to $TIMEZONE"
