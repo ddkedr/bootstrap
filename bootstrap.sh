@@ -876,7 +876,7 @@ if prompt_yes_no "$DOCKER_PROMPT" "yes"; then
             log_warning "installed $(dpkg-query -W -f='${Version}' docker-ce 2>/dev/null), apt cannot see anything newer."
             if prompt_yes_no "Add the docker.com repo for $CODENAME and update Docker? (containers restart)" "yes"; then
                 install -d -m 755 /etc/apt/keyrings
-                curl -fsSL "https://download.docker.com/linux/$OS_ID/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+                curl -fsSL "https://download.docker.com/linux/$OS_ID/gpg" | gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
                 chmod a+r /etc/apt/keyrings/docker.gpg
                 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_ID $CODENAME stable" \
                     > /etc/apt/sources.list.d/docker.list
@@ -897,7 +897,7 @@ if prompt_yes_no "$DOCKER_PROMPT" "yes"; then
     else
         log_info "Installing Docker from the official apt repository..."
         install -d -m 755 /etc/apt/keyrings
-        curl -fsSL "https://download.docker.com/linux/$OS_ID/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        curl -fsSL "https://download.docker.com/linux/$OS_ID/gpg" | gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
         chmod a+r /etc/apt/keyrings/docker.gpg
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_ID $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
             > /etc/apt/sources.list.d/docker.list
