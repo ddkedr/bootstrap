@@ -670,6 +670,12 @@ if prompt_yes_no "Setup firewall (ufw)?" "$(pdef yes no)"; then
     log_info "Listening on public addresses now (ufw does not change this list, only filters it):"
     LISTEN=$(ss -tlnupH 2>/dev/null | awk '$5 !~ /^(127\.|\[::1\])/ {print $1, $5, $7}')
     UFW_RULES=$(ufw status 2>/dev/null | awk '/ALLOW/ {print $1}')
+    # UDP sockets in the ephemeral range are outbound client sockets (DNS, QUIC
+    # from proxies like Xray), not services: their ports change on every
+    # restart, so a rule for them is dead on arrival. Same for the DHCP client
+    # ports, which ufw's own before.rules already let through.
+    read -r EPHEMERAL_LO EPHEMERAL_HI < /proc/sys/net/ipv4/ip_local_port_range 2>/dev/null \
+        || { EPHEMERAL_LO=32768; EPHEMERAL_HI=60999; }
     SUGGEST=""
     SEEN=" "
     if [[ -n "$LISTEN" ]]; then
@@ -681,6 +687,10 @@ if prompt_yes_no "Setup firewall (ufw)?" "$(pdef yes no)"; then
             SEEN+="$port/$proto "
             if [[ "$name" == "docker-proxy" ]]; then
                 echo "    $proto $port  $name  (container, bypasses ufw, no rule needed)"
+            elif [[ "$proto" == "udp" && ( "$port" == "68" || "$port" == "546" ) ]]; then
+                echo "    $proto $port  $name  (DHCP client, ufw allows it by default, no rule needed)"
+            elif [[ "$proto" == "udp" && "$port" -ge "$EPHEMERAL_LO" && "$port" -le "$EPHEMERAL_HI" ]]; then
+                echo "    $proto $port  $name  (ephemeral port, outbound socket, no rule needed)"
             elif [[ "$port" == "$UFW_SSH_PORT" ]]; then
                 echo "    $proto $port  $name  (SSH, already allowed)"
             elif grep -qx "$port/$proto" <<<"$UFW_RULES"; then
