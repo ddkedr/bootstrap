@@ -246,6 +246,29 @@ if prompt_yes_no "Set hostname?" "yes"; then
 else
     log_info "Keeping hostname $CURRENT_HOSTNAME"
 fi
+
+# Public DNS name, if the host has one: used in the hints at the end instead
+# of the bare IP (the script cannot discover it, reverse DNS is the provider's).
+# Kept in the marker file so a rerun offers it as the default.
+PUBLIC_NAME=""
+PREV_NAME=$(awk -F': ' '/^public_name: /{print $2}' /var/local/bootstrap-done 2>/dev/null || true)
+read -r -p "Public DNS name of this host, if any (e.g. lon.example.com)${PREV_NAME:+ [$PREV_NAME]}: " PUBLIC_NAME
+PUBLIC_NAME="${PUBLIC_NAME:-$PREV_NAME}"
+if [[ -n "$PUBLIC_NAME" ]]; then
+    MY_IPS=$(hostname -I 2>/dev/null)
+    PUB_IP=$(curl -m 5 -s https://api.ipify.org 2>/dev/null || true)
+    RESOLVED=$(getent ahosts "$PUBLIC_NAME" 2>/dev/null | awk '{print $1}' | sort -u | tr '\n' ' ')
+    MATCH="no"
+    for ip in $RESOLVED; do
+        if [[ " $MY_IPS $PUB_IP " == *" $ip "* ]]; then MATCH="yes"; fi
+    done
+    if [[ "$MATCH" == "yes" ]]; then
+        log_success "$PUBLIC_NAME resolves to this host"
+    else
+        log_warning "$PUBLIC_NAME resolves to [${RESOLVED:-nothing}], this host is [${MY_IPS}${PUB_IP:+ / public $PUB_IP}]"
+        if ! prompt_yes_no "Use $PUBLIC_NAME anyway?" "no"; then PUBLIC_NAME=""; fi
+    fi
+fi
 echo
 
 #-------------------------------------------------------------------------------
@@ -1056,6 +1079,7 @@ date: $(date -Is)
 script_version: $SCRIPT_VERSION
 profile: $PROFILE
 hostname: $(hostname)
+public_name: $PUBLIC_NAME
 user: $FINAL_USER
 log: $LOG_FILE
 EOF
@@ -1063,9 +1087,10 @@ log_info "Marker written: /var/local/bootstrap-done"
 echo
 
 HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+HOST_ADDR="${PUBLIC_NAME:-${HOST_IP:-<this-host>}}"
 if [[ -n "${SSH_PORT:-}" ]]; then
     log_warning "Before closing this session, verify SSH access in a NEW terminal:"
-    log_warning "    ssh -p $SSH_PORT $FINAL_USER@${HOST_IP:-<this-host>}"
+    log_warning "    ssh -p $SSH_PORT $FINAL_USER@$HOST_ADDR"
     echo
 fi
 
@@ -1077,7 +1102,7 @@ ALIAS_PREFIX=$([[ "$PROFILE" == "cloud" ]] && echo vps || echo pve)
 ALIAS=$(hostname)
 if [[ "$ALIAS" != ${ALIAS_PREFIX}-* ]]; then ALIAS="${ALIAS_PREFIX}-${ALIAS}"; fi
 log_info "Next, on your laptop:"
-log_info "    keymaster server-add $ALIAS ${HOST_IP:-<this-host>} ${SSH_PORT:-22} $FINAL_USER"
+log_info "    keymaster server-add $ALIAS $HOST_ADDR ${SSH_PORT:-22} $FINAL_USER"
 echo
 
 if [[ -f /var/run/reboot-required ]]; then
