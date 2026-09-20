@@ -745,8 +745,9 @@ if prompt_yes_no "Install and configure Fail2ban (SSH jail)?" "$(pdef yes no)"; 
 
     # On a rerun the default is the whitelist already in jail.local, minus the
     # loopback entries the script adds itself; Enter keeps it, 'none' clears it
+    # No jail.local yet (first run) makes grep fail; under pipefail that must not abort the script
     CUR_WL=$(grep -h '^ignoreip' /etc/fail2ban/jail.local 2>/dev/null | cut -d= -f2- \
-        | tr ' ' '\n' | grep -vE '^(127\.0\.0\.1/8|::1)?$' | paste -sd, -)
+        | tr ' ' '\n' | grep -vE '^(127\.0\.0\.1/8|::1)?$' | paste -sd, - || true)
     if [[ -n "$CUR_WL" ]]; then
         log_info "Current whitelist: $CUR_WL"
     fi
