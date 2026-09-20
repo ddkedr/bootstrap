@@ -648,6 +648,7 @@ if prompt_yes_no "Setup firewall (ufw)?" "$(pdef yes no)"; then
     # bound to a public address gets blocked by 'deny incoming' unless listed.
     log_info "Listening on public addresses now (ufw does not change this list, only filters it):"
     LISTEN=$(ss -tlnupH 2>/dev/null | awk '$5 !~ /^(127\.|\[::1\])/ {print $1, $5, $7}')
+    UFW_RULES=$(ufw status 2>/dev/null | awk '/ALLOW/ {print $1}')
     SUGGEST=""
     SEEN=" "
     if [[ -n "$LISTEN" ]]; then
@@ -661,20 +662,23 @@ if prompt_yes_no "Setup firewall (ufw)?" "$(pdef yes no)"; then
                 echo "    $proto $port  $name  (container, bypasses ufw, no rule needed)"
             elif [[ "$port" == "$UFW_SSH_PORT" ]]; then
                 echo "    $proto $port  $name  (SSH, already allowed)"
+            elif grep -qx "$port/$proto" <<<"$UFW_RULES"; then
+                echo "    $proto $port  $name  (already allowed; to close it: ufw delete allow $port/$proto)"
             else
-                echo "    $proto $port  $name  <- will be BLOCKED unless allowed"
+                echo "    $proto $port  $name  <- reachable now, will be BLOCKED unless you allow it below"
                 SUGGEST+="${SUGGEST:+,}$port/$proto"
             fi
         done <<<"$LISTEN"
     else
         echo "    (nothing besides loopback)"
     fi
-    if [[ -n "$SUGGEST" ]]; then
-        log_warning "Host services currently reachable that would be blocked: $SUGGEST"
-    fi
 
-    read -r -p "Additional ports to allow (comma-separated, e.g. 80,443,51820/udp)${SUGGEST:+ [$SUGGEST]}: " ADDITIONAL_PORTS
+    if [[ -n "$SUGGEST" ]]; then
+        log_warning "Enter keeps these reachable (adds allow rules): $SUGGEST. Type 'none' to leave them blocked."
+    fi
+    read -r -p "Additional ports to allow (comma-separated, e.g. 80,443,51820/udp; 'none' = nothing)${SUGGEST:+ [$SUGGEST]}: " ADDITIONAL_PORTS
     ADDITIONAL_PORTS="${ADDITIONAL_PORTS:-$SUGGEST}"
+    if [[ "$ADDITIONAL_PORTS" == "none" ]]; then ADDITIONAL_PORTS=""; fi
     if [[ -n "$ADDITIONAL_PORTS" ]]; then
         IFS=',' read -ra PORT_LIST <<<"$ADDITIONAL_PORTS"
         for entry in "${PORT_LIST[@]}"; do
