@@ -722,8 +722,17 @@ log_info "=== STEP 9: Fail2ban ==="
 if prompt_yes_no "Install and configure Fail2ban (SSH jail)?" "$(pdef yes no)"; then
     command -v fail2ban-server &>/dev/null || apt_install fail2ban
 
-    read -r -p "Whitelist IPs/CIDRs (comma-separated, optional): " FAIL2BAN_WHITELIST
-    FAIL2BAN_WHITELIST=$(echo "${FAIL2BAN_WHITELIST:-}" | tr ',' ' ')
+    # On a rerun the default is the whitelist already in jail.local, minus the
+    # loopback entries the script adds itself; Enter keeps it, 'none' clears it
+    CUR_WL=$(grep -h '^ignoreip' /etc/fail2ban/jail.local 2>/dev/null | cut -d= -f2- \
+        | tr ' ' '\n' | grep -vE '^(127\.0\.0\.1/8|::1)?$' | paste -sd, -)
+    if [[ -n "$CUR_WL" ]]; then
+        log_info "Current whitelist: $CUR_WL"
+    fi
+    read -r -p "Whitelist IPs/CIDRs (comma-separated; 'none' = empty)${CUR_WL:+ [$CUR_WL]}: " FAIL2BAN_WHITELIST
+    FAIL2BAN_WHITELIST="${FAIL2BAN_WHITELIST:-$CUR_WL}"
+    if [[ "$FAIL2BAN_WHITELIST" == "none" ]]; then FAIL2BAN_WHITELIST=""; fi
+    FAIL2BAN_WHITELIST=$(echo "${FAIL2BAN_WHITELIST:-}" | tr ',' ' ' | tr -s ' ' | sed 's/^ //; s/ $//')
 
     # Debian 12+ has no /var/log/auth.log by default - fail2ban must read journald
     F2B_BACKEND=""
