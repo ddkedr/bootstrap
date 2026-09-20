@@ -381,7 +381,7 @@ if [[ "$VIRT_CONTAINER" != "none" ]]; then
     log_info "Container ($VIRT_CONTAINER) detected - guest agent not needed, Proxmox manages CTs directly"
 elif [[ "$VIRT_VM" == "none" ]]; then
     log_info "No hypervisor detected - skipping guest agent"
-elif prompt_yes_no "Install qemu-guest-agent (clean shutdown, IP in UI, consistent snapshots)?" "$(pdef no yes)"; then
+elif prompt_yes_no "Install qemu-guest-agent? (for VMs on Proxmox: clean shutdown, IP in UI, consistent snapshots; a cloud VPS does not need it)" "$(pdef no yes)"; then
     apt_install qemu-guest-agent
     if systemctl enable --now qemu-guest-agent 2>/dev/null; then
         log_success "qemu-guest-agent installed and running"
