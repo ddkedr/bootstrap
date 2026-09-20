@@ -635,7 +635,38 @@ if prompt_yes_no "Setup firewall (ufw)?" "$(pdef yes no)"; then
     log_info "Allowing SSH on port $UFW_SSH_PORT..."
     ufw allow "$UFW_SSH_PORT/tcp" comment "SSH"
 
-    read -r -p "Additional ports to allow (comma-separated, e.g. 80,443,51820/udp): " ADDITIONAL_PORTS
+    # What the host listens on right now, so the reader can decide what to keep
+    # open. Docker-published ports bypass ufw and need no rule; everything else
+    # bound to a public address gets blocked by 'deny incoming' unless listed.
+    log_info "Listening on public addresses now (ufw does not change this list, only filters it):"
+    LISTEN=$(ss -tlnupH 2>/dev/null | awk '$5 !~ /^(127\.|\[::1\])/ {print $1, $5, $7}')
+    SUGGEST=""
+    SEEN=" "
+    if [[ -n "$LISTEN" ]]; then
+        while read -r proto addr proc; do
+            port="${addr##*:}"
+            name=$(sed -E 's/users:\(\("([^"]+)".*/\1/' <<<"$proc")
+            # v4 and v6 sockets of one service show up as two lines; report once
+            [[ "$SEEN" == *" $port/$proto "* ]] && continue
+            SEEN+="$port/$proto "
+            if [[ "$name" == "docker-proxy" ]]; then
+                echo "    $proto $port  $name  (container, bypasses ufw, no rule needed)"
+            elif [[ "$port" == "$UFW_SSH_PORT" ]]; then
+                echo "    $proto $port  $name  (SSH, already allowed)"
+            else
+                echo "    $proto $port  $name  <- will be BLOCKED unless allowed"
+                SUGGEST+="${SUGGEST:+,}$port/$proto"
+            fi
+        done <<<"$LISTEN"
+    else
+        echo "    (nothing besides loopback)"
+    fi
+    if [[ -n "$SUGGEST" ]]; then
+        log_warning "Host services currently reachable that would be blocked: $SUGGEST"
+    fi
+
+    read -r -p "Additional ports to allow (comma-separated, e.g. 80,443,51820/udp)${SUGGEST:+ [$SUGGEST]}: " ADDITIONAL_PORTS
+    ADDITIONAL_PORTS="${ADDITIONAL_PORTS:-$SUGGEST}"
     if [[ -n "$ADDITIONAL_PORTS" ]]; then
         IFS=',' read -ra PORT_LIST <<<"$ADDITIONAL_PORTS"
         for entry in "${PORT_LIST[@]}"; do
