@@ -588,20 +588,16 @@ if prompt_yes_no "Configure SSH hardening?" "yes"; then
 
     # --- Apply ---
     # Ubuntu 22.10+ runs ssh socket-activated: systemd's ssh.socket owns the
-    # listen port and ignores 'Port' in sshd_config. Ubuntu 24.04+ ships
-    # sshd-socket-generator, which syncs the port from sshd_config into the
-    # socket on daemon-reload; on releases without it, fall back to the
-    # classic always-running ssh.service.
+    # listen port and starts ssh.service on the first connection. Even with
+    # the 24.04+ port generator this has failed silently after a reboot (the
+    # socket accepted connections and closed them, ssh.service never started,
+    # nothing in the journal). An always-running sshd has no such moving
+    # parts, so switch to the classic service whenever the socket is in use.
     systemctl daemon-reload
-    if [[ "$SSH_PORT" != "22" ]] && systemctl is-enabled --quiet ssh.socket 2>/dev/null; then
-        if [[ -x /usr/lib/systemd/system-generators/sshd-socket-generator ]]; then
-            log_info "ssh.socket with port generator detected - keeping socket activation"
-            systemctl restart ssh.socket
-        else
-            log_info "ssh.socket without port generator - switching to classic ssh.service..."
-            systemctl disable --now ssh.socket
-            systemctl enable ssh.service
-        fi
+    if systemctl is-enabled --quiet ssh.socket 2>/dev/null; then
+        log_info "ssh.socket activation detected - switching to the classic always-running ssh.service"
+        systemctl disable --now ssh.socket
+        systemctl enable ssh.service
     fi
     systemctl restart ssh 2>/dev/null || systemctl restart sshd
 
