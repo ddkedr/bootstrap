@@ -674,9 +674,9 @@ if prompt_yes_no "Setup firewall (ufw)?" "$(pdef yes no)"; then
     fi
 
     if [[ -n "$SUGGEST" ]]; then
-        log_warning "Enter keeps these reachable (adds allow rules): $SUGGEST. Type 'none' to leave them blocked."
+        log_warning "Enter keeps these reachable (adds allow rules): $SUGGEST. Type 'none' to add no rules (already allowed ports stay allowed)."
     fi
-    read -r -p "Additional ports to allow (comma-separated, e.g. 80,443,51820/udp; 'none' = nothing)${SUGGEST:+ [$SUGGEST]}: " ADDITIONAL_PORTS
+    read -r -p "Additional ports to allow (comma-separated, e.g. 80,443,51820/udp; 'none' = add no rules)${SUGGEST:+ [$SUGGEST]}: " ADDITIONAL_PORTS
     ADDITIONAL_PORTS="${ADDITIONAL_PORTS:-$SUGGEST}"
     if [[ "$ADDITIONAL_PORTS" == "none" ]]; then ADDITIONAL_PORTS=""; fi
     if [[ -n "$ADDITIONAL_PORTS" ]]; then
