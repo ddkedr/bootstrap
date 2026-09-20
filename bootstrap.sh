@@ -979,12 +979,7 @@ echo
 #-------------------------------------------------------------------------------
 log_info "=== STEP 13: Swap ==="
 
-if [[ "$VIRT_CONTAINER" != "none" ]]; then
-    log_info "Container detected - swap is managed by the Proxmox host, skipping"
-elif [[ -n "$(swapon --show --noheadings 2>/dev/null)" ]]; then
-    log_info "Swap already active:"
-    swapon --show
-elif prompt_yes_no "Create a swap file (OOM safety net)?" "$(pdef yes no)"; then
+ask_swap_size() {
     SWAP_SIZE=""
     while [[ -z "$SWAP_SIZE" ]]; do
         read -r -p "Swap size in GiB (1-8) [2]: " SWAP_SIZE
@@ -994,16 +989,18 @@ elif prompt_yes_no "Create a swap file (OOM safety net)?" "$(pdef yes no)"; then
             SWAP_SIZE=""
         fi
     done
+}
 
-    log_info "Creating ${SWAP_SIZE}G swap file..."
-    if ! fallocate -l "${SWAP_SIZE}G" /swapfile 2>/dev/null; then
-        dd if=/dev/zero of=/swapfile bs=1M count=$((SWAP_SIZE * 1024)) status=none
+create_swap_file() {
+    log_info "Creating ${SWAP_SIZE}G swap file at $1..."
+    if ! fallocate -l "${SWAP_SIZE}G" "$1" 2>/dev/null; then
+        dd if=/dev/zero of="$1" bs=1M count=$((SWAP_SIZE * 1024)) status=none
     fi
-    chmod 600 /swapfile
-    mkswap /swapfile >/dev/null
-    swapon /swapfile
-    if ! grep -qE '^/swapfile[[:space:]]' /etc/fstab; then
-        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    chmod 600 "$1"
+    mkswap "$1" >/dev/null
+    swapon "$1"
+    if ! grep -qE "^$1[[:space:]]" /etc/fstab; then
+        echo "$1 none swap sw 0 0" >> /etc/fstab
     fi
     # Prefer RAM, keep swap as a safety net only
     echo 'vm.swappiness=10' > /etc/sysctl.d/99-bootstrap-swappiness.conf
@@ -1011,6 +1008,30 @@ elif prompt_yes_no "Create a swap file (OOM safety net)?" "$(pdef yes no)"; then
 
     log_success "Swap file ${SWAP_SIZE}G active"
     add_summary "Swap file: ${SWAP_SIZE}G (swappiness=10)"
+}
+
+# One active swap entry of type file, e.g. "/swapfile file 256M": that one the
+# script can resize. A swap partition or several entries are left alone.
+CUR_SWAP=$(swapon --show=NAME,TYPE,SIZE --noheadings --raw 2>/dev/null || true)
+if [[ "$VIRT_CONTAINER" != "none" ]]; then
+    log_info "Container detected - swap is managed by the Proxmox host, skipping"
+elif [[ -n "$CUR_SWAP" ]]; then
+    log_info "Swap already active:"
+    swapon --show
+    read -r SWAP_PATH SWAP_TYPE SWAP_SIZE_NOW <<<"$CUR_SWAP"
+    if [[ $(wc -l <<<"$CUR_SWAP") -eq 1 && "$SWAP_TYPE" == "file" && -f "$SWAP_PATH" ]] \
+        && prompt_yes_no "Recreate $SWAP_PATH with a different size? (currently $SWAP_SIZE_NOW; pages in use move back to RAM first)" "no"; then
+        ask_swap_size
+        if swapoff "$SWAP_PATH"; then
+            rm -f "$SWAP_PATH"
+            create_swap_file "$SWAP_PATH"
+        else
+            log_error "swapoff failed (not enough free RAM to take the used pages?) - keeping the current swap"
+        fi
+    fi
+elif prompt_yes_no "Create a swap file (OOM safety net)?" "$(pdef yes no)"; then
+    ask_swap_size
+    create_swap_file /swapfile
 else
     log_info "Skipping swap"
 fi
