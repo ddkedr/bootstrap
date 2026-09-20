@@ -490,11 +490,19 @@ log_info "=== STEP 7: SSH Hardening ==="
 SSH_PORT=""
 SSHD_DROPIN="/etc/ssh/sshd_config.d/00-bootstrap.conf"
 
+# Current effective settings first: on a rerun the defaults must be what the
+# host already has, or a stray Enter would move sshd back to port 22 while
+# hosts.conf and ufw still point at the old one.
+SSHD_NOW=$(sshd -T 2>/dev/null || /usr/sbin/sshd -T 2>/dev/null || true)
+CUR_PORT=$(awk '/^port /{print $2; exit}' <<<"$SSHD_NOW")
+CUR_PORT="${CUR_PORT:-22}"
+log_info "Current sshd: port ${CUR_PORT}, root login $(awk '/^permitrootlogin /{print $2}' <<<"$SSHD_NOW"), password auth $(awk '/^passwordauthentication /{print $2}' <<<"$SSHD_NOW")"
+
 if prompt_yes_no "Configure SSH hardening?" "yes"; then
-    # --- Port ---
+    # --- Port: default is the current one, never a hardcoded 22 ---
     while true; do
-        read -r -p "SSH port [22]: " SSH_PORT
-        SSH_PORT=${SSH_PORT:-22}
+        read -r -p "SSH port [$CUR_PORT]: " SSH_PORT
+        SSH_PORT=${SSH_PORT:-$CUR_PORT}
         if [[ "$SSH_PORT" =~ ^[0-9]+$ ]] && (( SSH_PORT >= 1 && SSH_PORT <= 65535 )); then
             break
         fi
