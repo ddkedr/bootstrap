@@ -887,9 +887,12 @@ if [[ "$DOCKER_SOURCE" != "none" ]]; then
 else
     log_info "Docker: not installed"
     DOCKER_PROMPT="Install Docker?"
+    DOCKER_DEFAULT="no"
 fi
 
-if prompt_yes_no "$DOCKER_PROMPT" "yes"; then
+# Configuring an existing Docker is harmless, so default yes; installing one
+# on a host that has none is a decision, so default no
+if prompt_yes_no "$DOCKER_PROMPT" "${DOCKER_DEFAULT:-yes}"; then
     if [[ "$VIRT_CONTAINER" != "none" ]]; then
         log_warning "This looks like a container (LXC/CT). Docker inside a CT needs nesting=1 and may still misbehave - a VM is more reliable."
     fi
