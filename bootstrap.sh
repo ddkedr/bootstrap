@@ -373,16 +373,21 @@ echo
 #-------------------------------------------------------------------------------
 log_info "=== STEP 4: Common Utilities ==="
 if prompt_yes_no "Install common utilities (curl, git, htop, vim, ...)?" "yes"; then
-    apt_install \
-        curl \
-        git \
-        htop \
-        vim \
-        gnupg \
-        lsb-release \
-        ca-certificates \
-        apt-transport-https \
-        software-properties-common
+    # Package names drift between releases (Debian 13 dropped
+    # software-properties-common); install what exists, name what does not
+    [[ "$APT_UPDATED" == "no" ]] && { apt-get update -qq; APT_UPDATED="yes"; }
+    UTILS=""
+    MISSING=""
+    for pkg in curl git htop vim gnupg lsb-release ca-certificates apt-transport-https; do
+        if apt-cache show "$pkg" &>/dev/null; then
+            UTILS+=" $pkg"
+        else
+            MISSING+=" $pkg"
+        fi
+    done
+    # shellcheck disable=SC2086
+    apt_install $UTILS
+    [[ -n "$MISSING" ]] && log_warning "Not in this release's repos, skipped:$MISSING"
     log_success "Common utilities installed"
     add_summary "Common utilities installed"
 else
