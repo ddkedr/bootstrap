@@ -519,6 +519,10 @@ SSHD_DROPIN="/etc/ssh/sshd_config.d/00-bootstrap.conf"
 # Current effective settings first: on a rerun the defaults must be what the
 # host already has, or a stray Enter would move sshd back to port 22 while
 # hosts.conf and ufw still point at the old one.
+# sshd -t/-T refuse to run without /run/sshd. The service creates it on its
+# first start, which on a socket-activated host has not happened yet when the
+# script runs from the console right after boot (nobody has connected).
+mkdir -p -m 0755 /run/sshd
 SSHD_NOW=$(sshd -T 2>/dev/null || /usr/sbin/sshd -T 2>/dev/null || true)
 CUR_PORT=$(awk '/^port /{print $2; exit}' <<<"$SSHD_NOW")
 CUR_PORT="${CUR_PORT:-22}"
@@ -590,6 +594,9 @@ if prompt_yes_no "Configure SSH hardening?" "yes"; then
         log_error "Fix the issue and re-run this step, or inspect with: sshd -T"
         exit 1
     fi
+
+    # A .rejected file from an earlier failed run is now stale
+    rm -f "${SSHD_DROPIN}.rejected"
 
     # --- Apply ---
     # Ubuntu 22.10+ runs ssh socket-activated: systemd's ssh.socket owns the
