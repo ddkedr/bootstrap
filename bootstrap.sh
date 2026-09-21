@@ -750,9 +750,32 @@ echo
 #-------------------------------------------------------------------------------
 log_info "=== STEP 9: Fail2ban ==="
 
+F2B_GO=0
 if prompt_yes_no "Install and configure Fail2ban (SSH jail)?" "$(pdef yes no)"; then
     command -v fail2ban-server &>/dev/null || apt_install fail2ban
+    F2B_GO=1
 
+    # A jail.local written by hand may hold more than the sshd jail. The script
+    # replaces the whole file, so keep a copy and, if other jails would be lost,
+    # ask before touching it.
+    if [[ -f /etc/fail2ban/jail.local ]] && ! grep -q '^# Managed by bootstrap.sh' /etc/fail2ban/jail.local; then
+        OTHER_JAILS=$(grep -oE '^\[[^]]+\]' /etc/fail2ban/jail.local | grep -vE '^\[(DEFAULT|sshd)\]$' | paste -sd' ' - || true)
+        F2B_BAK="/etc/fail2ban/jail.local.bak-$(date +%Y%m%d-%H%M%S)"
+        cp /etc/fail2ban/jail.local "$F2B_BAK"
+        log_warning "Existing jail.local was not written by this script - copy kept at $F2B_BAK"
+        if [[ -n "$OTHER_JAILS" ]]; then
+            log_warning "It defines jails besides sshd: $OTHER_JAILS. They will be GONE from the new file."
+            if ! prompt_yes_no "Replace jail.local anyway? (No = leave Fail2ban as it is)" "no"; then
+                log_info "Keeping the existing jail.local"
+                F2B_GO=0
+            fi
+        fi
+    fi
+else
+    log_info "Skipping Fail2ban"
+fi
+
+if [[ "$F2B_GO" == 1 ]]; then
     # On a rerun the default is the whitelist already in jail.local, minus the
     # loopback entries the script adds itself; Enter keeps it, 'none' clears it
     # No jail.local yet (first run) makes grep fail; under pipefail that must not abort the script
@@ -798,8 +821,6 @@ EOF
     else
         log_error "Fail2ban failed to start - check: journalctl -u fail2ban"
     fi
-else
-    log_info "Skipping Fail2ban"
 fi
 echo
 
