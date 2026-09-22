@@ -409,8 +409,14 @@ if prompt_yes_no "Install common utilities (curl, git, htop, vim, ...)?" "yes"; 
     if find /etc/terminfo /usr/share/terminfo /lib/terminfo -name xterm-ghostty 2>/dev/null | grep -q .; then
         log_info "Terminfo xterm-ghostty already installed system-wide"
     elif infocmp -x ghostty &>/dev/null; then
-        infocmp -x ghostty | sed 's/^ghostty|/xterm-ghostty|ghostty|/' | tic -x -o /etc/terminfo - \
-            && log_success "Terminfo xterm-ghostty installed in /etc/terminfo (Ghostty + sudo work)"
+        # tic warns that old tic versions may read a one-word description
+        # as an alias; harmless, so it is silenced and the result checked
+        infocmp -x ghostty | sed 's/^ghostty|/xterm-ghostty|ghostty|/' | tic -x -o /etc/terminfo - 2>/dev/null || true
+        if [[ -f /etc/terminfo/x/xterm-ghostty ]]; then
+            log_success "Terminfo xterm-ghostty installed in /etc/terminfo (Ghostty + sudo work)"
+        else
+            log_warning "Could not compile the xterm-ghostty terminfo alias - check: infocmp -x ghostty"
+        fi
     else
         log_info "ncurses here has no 'ghostty' entry (older than 6.5-20241228) - skipping xterm-ghostty alias"
     fi
