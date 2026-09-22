@@ -388,7 +388,7 @@ if prompt_yes_no "Install common utilities (curl, git, htop, vim, ...)?" "yes"; 
     [[ "$APT_UPDATED" == "no" ]] && { apt-get update -qq; APT_UPDATED="yes"; }
     UTILS=""
     MISSING=""
-    for pkg in curl git htop vim gnupg lsb-release ca-certificates apt-transport-https; do
+    for pkg in curl git htop vim gnupg lsb-release ca-certificates apt-transport-https ncurses-term; do
         if apt-cache show "$pkg" &>/dev/null; then
             UTILS+=" $pkg"
         else
@@ -400,6 +400,20 @@ if prompt_yes_no "Install common utilities (curl, git, htop, vim, ...)?" "yes"; 
     [[ -n "$MISSING" ]] && log_warning "Not in this release's repos, skipped:$MISSING"
     log_success "Common utilities installed"
     add_summary "Common utilities installed"
+
+    # Ghostty sends TERM=xterm-ghostty, but ncurses (6.5-20241228+, package
+    # ncurses-term) ships the entry only as 'ghostty'. Its own ssh integration
+    # puts a copy into ~/.terminfo of the login user, which root under sudo
+    # does not see: full-screen tools (screen, do-release-upgrade, htop) then
+    # fail with "Cannot find terminfo entry". Compile the alias system-wide.
+    if find /etc/terminfo /usr/share/terminfo /lib/terminfo -name xterm-ghostty 2>/dev/null | grep -q .; then
+        log_info "Terminfo xterm-ghostty already installed system-wide"
+    elif infocmp -x ghostty &>/dev/null; then
+        infocmp -x ghostty | sed 's/^ghostty|/xterm-ghostty|ghostty|/' | tic -x -o /etc/terminfo - \
+            && log_success "Terminfo xterm-ghostty installed in /etc/terminfo (Ghostty + sudo work)"
+    else
+        log_info "ncurses here has no 'ghostty' entry (older than 6.5-20241228) - skipping xterm-ghostty alias"
+    fi
 else
     log_info "Skipping utilities installation"
 fi
