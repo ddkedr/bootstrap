@@ -216,6 +216,9 @@ echo
 #-------------------------------------------------------------------------------
 log_info "=== STEP 1: Hostname ==="
 
+VIRT_CONTAINER=$(systemd-detect-virt --container 2>/dev/null) || VIRT_CONTAINER="none"
+VIRT_VM=$(systemd-detect-virt --vm 2>/dev/null) || VIRT_VM="none"
+
 CURRENT_HOSTNAME=$(hostname)
 log_info "Current hostname: $CURRENT_HOSTNAME"
 
@@ -240,6 +243,13 @@ if prompt_yes_no "Set hostname?" "yes"; then
         fi
         log_success "Hostname set to $NEW_HOSTNAME"
         add_summary "Hostname: $NEW_HOSTNAME"
+        # Proxmox rewrites /etc/hostname of a CT from the container config on
+        # every start, so this change survives only until the next reboot
+        if [[ "$VIRT_CONTAINER" == "lxc" ]]; then
+            log_warning "This is a Proxmox CT: the host rewrites /etc/hostname on every start."
+            log_warning "To make it stick, on the Proxmox node: pct set <vmid> -hostname $NEW_HOSTNAME"
+            log_warning "(or the CT's Options - Hostname in the web UI)"
+        fi
     else
         log_info "Hostname unchanged"
     fi
@@ -399,9 +409,6 @@ echo
 # STEP 5: QEMU Guest Agent (Proxmox/KVM VMs)
 #-------------------------------------------------------------------------------
 log_info "=== STEP 5: QEMU Guest Agent ==="
-
-VIRT_CONTAINER=$(systemd-detect-virt --container 2>/dev/null) || VIRT_CONTAINER="none"
-VIRT_VM=$(systemd-detect-virt --vm 2>/dev/null) || VIRT_VM="none"
 
 if [[ "$VIRT_CONTAINER" != "none" ]]; then
     log_info "Container ($VIRT_CONTAINER) detected - guest agent not needed, Proxmox manages CTs directly"
